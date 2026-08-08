@@ -103,6 +103,11 @@ suits.forEach((s,si)=>values.forEach((v,vi)=>ranks.push({
   name:v+" "+s.symbol, value:v, suit:s.name, symbol:s.symbol, red:s.red, copies:1, id:si*13+vi
 })));
 
+let peer,conn,isHost=false,myName="",oppName="",roomId="";
+let hand=[],oppCount=0,sets=[],turn=false,gameStarted=false;
+
+function $(id){return document.getElementById(id)}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function setStatus(t){$("status").textContent=t}
 function randomId(){return "gf-"+Math.random().toString(36).slice(2,10)}
 function peerReady(){
