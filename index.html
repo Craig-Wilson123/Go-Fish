@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Go Fish — Custom</title>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>window.addEventListener("error",function(e){if(!window.Peer && e.target && e.target.tagName==="SCRIPT"){var x=document.createElement("script");x.src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js";document.head.appendChild(x)}} ,true);</script>
 <style>
 :root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#171717;background:#f5f5f7}
 *{box-sizing:border-box}body{margin:0}.wrap{max-width:900px;margin:auto;padding:18px}
@@ -40,12 +41,12 @@ select{padding:11px;border:1px solid #d5d5dc;border-radius:11px;width:100%}
   <div id="lobby" class="card">
     <h2>2. Connect</h2>
     <div class="row">
-      <button onclick="createRoom()">Create room</button>
+      <button id="createRoomBtn" type="button">Create room</button>
       <input id="joinCode" placeholder="Enter room code" autocapitalize="characters">
-      <button onclick="joinRoom()" class="secondary">Join room</button>
+      <button id="joinRoomBtn" type="button" class="secondary">Join room</button>
     </div>
     <div style="height:10px"></div>
-    <div id="status" class="status">Not connected.</div>
+    <div id="status" class="status">Ready — tap Create room.</div>
     <div id="hostBox" class="hidden" style="margin-top:12px">
       <div style="text-align:center;color:#666">Give this code to your girlfriend</div>
       <div id="roomCode"></div>
@@ -301,6 +302,13 @@ function updateUI(){
   $("sets").innerHTML=sets.length?sets.map(i=>`<span class="count" style="display:inline-block;margin:3px">${esc(rankName(i))}</span>`).join(""):"<span class='sub'>None yet</span>";
 }
 function addLog(t){let d=document.createElement("div");d.textContent=t;$("log").prepend(d)}
+
+document.addEventListener("DOMContentLoaded",()=>{
+  const createBtn=document.getElementById("createRoomBtn");
+  const joinBtn=document.getElementById("joinRoomBtn");
+  if(createBtn) createBtn.addEventListener("click", createRoom);
+  if(joinBtn) joinBtn.addEventListener("click", joinRoom);
+}); 
 </script>
 </body>
 </html>
