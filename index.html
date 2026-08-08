@@ -33,7 +33,7 @@ select{padding:11px;border:1px solid #d5d5dc;border-radius:11px;width:100%}
 
   <div id="setup" class="card">
     <h2>🃏 Ready-to-play Go Fish</h2>
-    <p class="sub">A standard 52-card deck is built in. No setup needed.</p>
+    <p class="sub">A standard 52-card deck is built in. No setup needed. Chrome and Safari can play together.</p>
     <div class="status">♠ ♥ ♦ ♣ &nbsp; A–K &nbsp; • &nbsp; 52 cards</div>
   </div>
 
@@ -104,24 +104,65 @@ suits.forEach((s,si)=>values.forEach((v,vi)=>ranks.push({
 
 function setStatus(t){$("status").textContent=t}
 function randomId(){return "gf-"+Math.random().toString(36).slice(2,10)}
+function peerReady(){
+  if(typeof Peer==="undefined"){
+    setStatus("The connection service did not load. Refresh this page and try again.");
+    return false;
+  }
+  return true;
+}
 function createRoom(){
-  if(ranks.length<2)return setStatus("Add at least 2 card types first.");
+  if(!peerReady()) return;
   isHost=true; myName="Player 1";
-  peer=new Peer(randomId());
-  peer.on("open",id=>{roomId=id; $("roomCode").textContent=id.slice(3).toUpperCase();$("hostBox").classList.remove("hidden");setStatus("Waiting for the other player…")});
-  peer.on("connection",c=>{if(conn){c.close();return}conn=c;setupConn();});
-  peer.on("error",e=>setStatus("Connection error: "+e.type));
+  setStatus("Creating room…");
+  try{
+    peer=new Peer(undefined,{debug:0});
+    peer.on("open",id=>{
+      roomId=id;
+      $("roomCode").textContent=id.replace(/^gf-/,"").toUpperCase();
+      $("hostBox").classList.remove("hidden");
+      setStatus("Room ready — send the code to the other player.");
+    });
+    peer.on("connection",c=>{
+      if(conn){c.close();return}
+      conn=c; setupConn();
+    });
+    peer.on("error",e=>{
+      console.error("Peer error",e);
+      setStatus("Connection error: "+(e.type||e.message||"unknown error")+". Try refreshing.");
+    });
+  }catch(e){
+    console.error(e);
+    setStatus("Couldn't create the room. Refresh the page and try again.");
+  }
 }
 function joinRoom(){
-  let code=$("joinCode").value.trim().toLowerCase();if(!code)return;
-  isHost=false;myName="Player 2";
-  roomId="gf-"+code;
-  peer=new Peer();
-  peer.on("open",()=>{conn=peer.connect(roomId,{reliable:true});setupConn()});
-  peer.on("error",e=>setStatus("Couldn't join: "+e.type+" — check the code."));
+  if(!peerReady()) return;
+  let code=$("joinCode").value.trim().toLowerCase().replace(/^gf-/,"");
+  if(!code){setStatus("Enter the room code first.");return}
+  isHost=false; myName="Player 2"; roomId="gf-"+code;
+  setStatus("Joining room…");
+  try{
+    peer=new Peer(undefined,{debug:0});
+    peer.on("open",()=>{
+      conn=peer.connect(roomId,{reliable:true});
+      setupConn();
+    });
+    peer.on("error",e=>{
+      console.error("Peer error",e);
+      setStatus("Couldn't join: "+(e.type||e.message||"unknown error")+". Check the room code.");
+    });
+  }catch(e){
+    console.error(e);
+    setStatus("Couldn't join the room. Refresh the page and try again.");
+  }
 }
 function setupConn(){
-  conn.on("open",()=>{setStatus("Connected!");conn.send({type:"hello",name:myName});if(isHost)startGame()});
+  conn.on("open",()=>{
+    setStatus("Connected!");
+    conn.send({type:"hello",name:myName});
+    if(isHost)startGame();
+  });
   conn.on("data",onData);
   conn.on("close",()=>setStatus("Other player disconnected."));
 }
