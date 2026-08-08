@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Go Fish — Custom</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#171717;background:#f5f5f7}
+*{box-sizing:border-box}body{margin:0}.wrap{max-width:900px;margin:auto;padding:18px}
+h1{margin:0 0 4px;font-size:28px}.sub{color:#666;margin:0 0 18px}
+.card,.panel{background:white;border-radius:18px;padding:16px;box-shadow:0 2px 12px #00000012;margin-bottom:14px}
+button,input,select{font:inherit}button{border:0;border-radius:12px;padding:11px 15px;background:#171717;color:#fff;font-weight:700;cursor:pointer}
+button.secondary{background:#e9e9ee;color:#171717}button:disabled{opacity:.45}
+input{width:100%;padding:11px;border:1px solid #d5d5dc;border-radius:11px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row>*{flex:1}.row button{flex:0 0 auto}
+.hidden{display:none}.status{padding:10px 12px;border-radius:10px;background:#f0f0f4;color:#444}
+#roomCode{font-size:28px;font-weight:800;letter-spacing:3px;text-align:center;padding:12px;background:#f1f1f5;border-radius:12px}
+.editor{display:grid;grid-template-columns:1fr 90px auto;gap:8px;margin:8px 0}
+.hands{display:flex;gap:8px;flex-wrap:wrap}
+.playcard{width:76px;height:106px;border-radius:12px;border:1px solid #ddd;background:linear-gradient(145deg,#fff,#eee);padding:8px;text-align:center;display:flex;flex-direction:column;justify-content:center;overflow:hidden}
+.playcard b{font-size:23px}.playcard span{font-size:32px;line-height:1}.playcard.red{color:#d11}
+.count{background:#eee;border-radius:999px;padding:3px 8px;font-size:12px}
+.log{max-height:180px;overflow:auto;font-size:14px;color:#444}.log div{padding:5px 0;border-bottom:1px solid #eee}
+select{padding:11px;border:1px solid #d5d5dc;border-radius:11px;width:100%}
+@media(max-width:600px){.editor{grid-template-columns:1fr 70px auto}.wrap{padding:12px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🐟 Go Fish</h1>
+  <p class="sub">Custom cards • two phones • private hands</p>
+
+  <div id="setup" class="card">
+    <h2>🃏 Ready-to-play Go Fish</h2>
+    <p class="sub">A standard 52-card deck is built in. No setup needed.</p>
+    <div class="status">♠ ♥ ♦ ♣ &nbsp; A–K &nbsp; • &nbsp; 52 cards</div>
+  </div>
+
+  <div id="lobby" class="card">
+    <h2>2. Connect</h2>
+    <div class="row">
+      <button onclick="createRoom()">Create room</button>
+      <input id="joinCode" placeholder="Enter room code" autocapitalize="characters">
+      <button onclick="joinRoom()" class="secondary">Join room</button>
+    </div>
+    <div style="height:10px"></div>
+    <div id="status" class="status">Not connected.</div>
+    <div id="hostBox" class="hidden" style="margin-top:12px">
+      <div style="text-align:center;color:#666">Give this code to your girlfriend</div>
+      <div id="roomCode"></div>
+    </div>
+  </div>
+
+  <div id="game" class="hidden">
+    <div class="panel">
+      <div class="row">
+        <div><b>You:</b> <span id="youName"></span></div>
+        <div><b>Opponent:</b> <span id="oppName"></span></div>
+        <button class="secondary" onclick="location.reload()">New game</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Your hand <span id="handCount" class="count"></span></h2>
+      <div id="hand" class="hands"></div>
+    </div>
+
+    <div id="actionPanel" class="panel">
+      <h2>Ask for a card</h2>
+      <div class="row">
+        <select id="askSelect"></select>
+        <button onclick="askCard()">Ask</button>
+        <button onclick="goFish()" class="secondary">Go Fish</button>
+      </div>
+      <p id="hint" class="sub" style="margin:9px 0 0"></p>
+    </div>
+
+    <div class="panel">
+      <h2>Sets collected</h2>
+      <div id="sets"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Game log</h2>
+      <div id="log" class="log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const EXAMPLE=[["Cats",4],["Dogs",4],["Birds",4],["Fish",4],["Sharks",4],["Lions",4],["Tigers",4],["Bears",4],["Wolves",4],["Monkeys",4]];
+const suits=[
+  {name:"Spades",symbol:"♠",red:false},
+  {name:"Hearts",symbol:"♥",red:true},
+  {name:"Diamonds",symbol:"♦",red:true},
+  {name:"Clubs",symbol:"♣",red:false}
+];
+const values=["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const ranks=[];
+suits.forEach((s,si)=>values.forEach((v,vi)=>ranks.push({
+  name:v+" "+s.symbol, value:v, suit:s.name, symbol:s.symbol, red:s.red, copies:1, id:si*13+vi
+})));
+
+function setStatus(t){$("status").textContent=t}
+function randomId(){return "gf-"+Math.random().toString(36).slice(2,10)}
+function createRoom(){
+  if(ranks.length<2)return setStatus("Add at least 2 card types first.");
+  isHost=true; myName="Player 1";
+  peer=new Peer(randomId());
+  peer.on("open",id=>{roomId=id; $("roomCode").textContent=id.slice(3).toUpperCase();$("hostBox").classList.remove("hidden");setStatus("Waiting for the other player…")});
+  peer.on("connection",c=>{if(conn){c.close();return}conn=c;setupConn();});
+  peer.on("error",e=>setStatus("Connection error: "+e.type));
+}
+function joinRoom(){
+  let code=$("joinCode").value.trim().toLowerCase();if(!code)return;
+  isHost=false;myName="Player 2";
+  roomId="gf-"+code;
+  peer=new Peer();
+  peer.on("open",()=>{conn=peer.connect(roomId,{reliable:true});setupConn()});
+  peer.on("error",e=>setStatus("Couldn't join: "+e.type+" — check the code."));
+}
+function setupConn(){
+  conn.on("open",()=>{setStatus("Connected!");conn.send({type:"hello",name:myName});if(isHost)startGame()});
+  conn.on("data",onData);
+  conn.on("close",()=>setStatus("Other player disconnected."));
+}
+function send(o){if(conn&&conn.open)conn.send(o)}
+
+function buildDeck(){return shuffle(ranks.map(r=>({rank:r.id,id:crypto.randomUUID()})))}
+function shuffle(a){for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+
+let hostState=null;
+function startGame(){
+  const deck=buildDeck(), half=Math.ceil(deck.length/2);
+  const h1=deck.slice(0,half),h2=deck.slice(half);
+  hostState={hands:[h1,h2],sets:[[],[]],deck:[],turn:0};
+  send({type:"init",hand:h2,oppCount:h1.length,turn:false});
+  enterGame(h1,h2.length,true);
+  broadcastState();
+}
+function broadcastState(){
+  if(!hostState)return;
+  send({type:"state",oppCount:hostState.hands[0].length,sets:hostState.sets[1],turn:hostState.turn===1,gameOver:hostState.hands[0].length===0&&hostState.hands[1].length===0});
+}
+function onData(m){
+  if(m.type==="hello"){
+    oppName=m.name||"Player 2";$("oppName").textContent=oppName;
+    if(isHost){$("youName").textContent=myName;setStatus("Game starting…")}
+  } else if(m.type==="init"){
+    oppName="Player 1";enterGame(m.hand,m.oppCount,false);turn=m.turn;updateUI();
+  } else if(m.type==="state"){
+    oppCount=m.oppCount;sets=m.sets||[];turn=m.turn;updateUI();
+    if(m.gameOver)alert("Game over!");
+  } else if(m.type==="ask"&&isHost){window.hostLastAskedRank=m.rank;hostAsk(m.rank)}
+  else if(m.type==="result"){hand=m.hand;sets=m.sets||sets;turn=m.turn;addLog(m.text);updateUI()}
+  else if(m.type==="draw"){if(isHost)hostDraw()}
+  else if(m.type==="sync"){hand=m.hand;sets=m.sets||[];turn=m.turn;updateUI()}
+}
+function enterGame(h,oc,host){
+  hand=h;oppCount=oc;gameStarted=true;turn=host?true:false;
+  $("setup").classList.add("hidden");$("lobby").classList.add("hidden");$("game").classList.remove("hidden");
+  $("youName").textContent=myName;$("oppName").textContent=host?"Player 2":"Player 1";updateUI();
+  addLog(host?"You go first.":"Connected — wait for your turn.");
+}
+function rankName(i){return ranks[i]?.name||"Unknown"}
+function countRank(h,ri){return h.filter(c=>c.rank===ri).length}
+function checkSets(h,si){
+  const done=[];
+  ranks.forEach((r,i)=>{if(countRank(h,i)>=r.copies){h=h.filter(c=>c.rank!==i);done.push(i)}})
+  return [h,done]
+}
+function hostAsk(ri){
+  if(hostState.turn!==1)return;
+  const mine=hostState.hands[1],other=hostState.hands[0],n=countRank(other,ri);
+  if(countRank(mine,ri)===0){send({type:"result",hand:mine,sets:hostState.sets[1],turn:false,text:"You must have at least one "+rankName(ri)+" to ask for it."});return}
+  if(n){
+    const moved=other.filter(c=>c.rank===ri);hostState.hands[1].push(...moved);hostState.hands[0]=other.filter(c=>c.rank!==ri);
+    [hostState.hands[1],newSets]=checkSets(hostState.hands[1],1);hostState.sets[1].push(...newSets);
+    send({type:"result",hand:hostState.hands[1],sets:hostState.sets[1],turn:true,text:"They had "+n+" "+rankName(ri)+" — you got them. Ask again."});
+    broadcastState();
+  }else{
+    hostState.turn=0;send({type:"result",hand:hostState.hands[1],sets:hostState.sets[1],turn:false,text:"Go Fish! No "+rankName(ri)+"."});broadcastState();
+  }
+}
+function askCard(){
+  if(!turn)return;
+  const ri=+$("askSelect").value;
+  window.lastAskedRank=ri; window.hostLastAskedRank=ri;
+  if(countRank(hand,ri)===0)return addLog("You need at least one of that card to ask for it.");
+  if(isHost){hostAskAsHost(ri)}else{send({type:"ask",rank:ri});turn=false;updateUI();addLog("You asked for "+rankName(ri)+".")}
+}
+function hostAskAsHost(ri){
+  const other=hostState.hands[1],mine=hostState.hands[0],n=countRank(other,ri);
+  if(n){
+    const moved=other.filter(c=>c.rank===ri);hostState.hands[0].push(...moved);hostState.hands[1]=other.filter(c=>c.rank!==ri);
+    let ns;[hostState.hands[0],ns]=checkSets(hostState.hands[0],0);hostState.sets[0].push(...ns);
+    addLog("They had "+n+" "+rankName(ri)+". You got them — ask again.");turn=true;updateUI();broadcastState();
+  }else{
+    addLog("Go Fish! No "+rankName(ri)+".");hostState.turn=1;turn=false;updateUI();broadcastState();
+  }
+}
+function goFish(){
+  if(!turn)return;
+  if(isHost)hostDraw();else{send({type:"draw"});turn=false;updateUI();addLog("You went fishing…")}
+}
+function hostDraw(){
+  if(!hostState || hostState.turn!==0 && !isHost)return;
+  const player=hostState.turn;
+  if(!hostState.drawDeck.length){
+    hostState.turn=1-player;
+    if(player===0){turn=false;addLog("The deck is empty. Turn passes.");}
+    else send({type:"result",hand:hostState.hands[1],sets:hostState.sets[1],turn:false,text:"The deck is empty. Turn passes."});
+    broadcastState();updateUI();return;
+  }
+  const c=hostState.drawDeck.pop();
+  hostState.hands[player].push(c);
+  const drawnRank=c.rank;
+  let ns;
+  [hostState.hands[player],ns]=checkSets(hostState.hands[player],player);
+  hostState.sets[player].push(...ns);
+
+  if(player===0){
+    const gotAskedFor = window.lastAskedRank===drawnRank;
+    addLog("You drew "+rankName(drawnRank)+".");
+    turn=gotAskedFor;
+    hostState.turn=gotAskedFor?0:1;
+    if(gotAskedFor)addLog("You drew the card you asked for — go again.");
+    else if(hostState.drawDeck.length===0)addLog("The deck is empty.");
+  }else{
+    const gotAskedFor = window.hostLastAskedRank===drawnRank;
+    send({type:"result",hand:hostState.hands[1],sets:hostState.sets[1],turn:gotAskedFor,text:"You drew "+rankName(drawnRank)+"."+(gotAskedFor?" You got the card you asked for — go again.":" Your turn is over.")});
+    hostState.turn=gotAskedFor?1:0;
+  }
+  window.lastAskedRank=null;window.hostLastAskedRank=null;
+  broadcastState();updateUI();
+}
+// Replace startGame with a version that keeps the actual draw pile.
+const originalStart=startGame;
+startGame=function(){
+  const deck=buildDeck();
+  // Standard Go Fish: 7 cards each when the deck allows it; otherwise split evenly.
+  const per=Math.min(7,Math.floor(deck.length/2));
+  hostState={hands:[deck.slice(0,per),deck.slice(per,per*2)],sets:[[],[]],
+             drawDeck:deck.slice(per*2),turn:0};
+  send({type:"init",hand:hostState.hands[1],oppCount:hostState.hands[0].length,turn:false});
+  enterGame(hostState.hands[0],hostState.hands[1].length,true);
+  broadcastState();
+};
+function updateUI(){
+  $("handCount").textContent=hand.length;
+  $("hand").innerHTML=hand.length?hand.map(c=>{
+    const r=ranks[c.rank];
+    return `<div class="playcard ${r.red?"red":""}"><b>${esc(r.value)}</b><span>${r.symbol}</span></div>`;
+  }).join(""):"<span class='sub'>No cards</span>";
+  const opts=ranks.map((r,i)=>countRank(hand,i)?`<option value="${i}">${esc(r.name)} (${countRank(hand,i)})</option>`:"").join("");
+  $("askSelect").innerHTML=opts||"<option>No cards to ask for</option>";
+  $("hint").textContent=turn?"Your turn — ask for a card you already have, or Go Fish.":"Waiting for the other player…";
+  $("actionPanel").style.opacity=turn?"1":".65";
+  $("sets").innerHTML=sets.length?sets.map(i=>`<span class="count" style="display:inline-block;margin:3px">${esc(rankName(i))}</span>`).join(""):"<span class='sub'>None yet</span>";
+}
+function addLog(t){let d=document.createElement("div");d.textContent=t;$("log").prepend(d)}
+</script>
+</body>
+</html>
