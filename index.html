@@ -17,14 +17,13 @@ input{width:100%;padding:11px;border:1px solid #d5d5dc;border-radius:11px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row>*{flex:1}.row button{flex:0 0 auto}
 .hidden{display:none}.status{padding:10px 12px;border-radius:10px;background:#f0f0f4;color:#444}
 #roomCode{font-size:28px;font-weight:800;letter-spacing:3px;text-align:center;padding:12px;background:#f1f1f5;border-radius:12px}
-.editor{display:grid;grid-template-columns:1fr 90px auto;gap:8px;margin:8px 0}
 .hands{display:flex;gap:8px;flex-wrap:wrap}
 .playcard{width:76px;height:106px;border-radius:12px;border:1px solid #ddd;background:linear-gradient(145deg,#fff,#eee);padding:8px;text-align:center;display:flex;flex-direction:column;justify-content:center;overflow:hidden}
 .playcard b{font-size:23px}.playcard span{font-size:32px;line-height:1}.playcard.red{color:#d11}
 .count{background:#eee;border-radius:999px;padding:3px 8px;font-size:12px}
 .log{max-height:180px;overflow:auto;font-size:14px;color:#444}.log div{padding:5px 0;border-bottom:1px solid #eee}
 select{padding:11px;border:1px solid #d5d5dc;border-radius:11px;width:100%}
-@media(max-width:600px){.editor{grid-template-columns:1fr 70px auto}.wrap{padding:12px}}
+@media(max-width:600px){.wrap{padding:12px}}
 </style>
 </head>
 <body>
@@ -60,6 +59,7 @@ select{padding:11px;border:1px solid #d5d5dc;border-radius:11px;width:100%}
         <div><b>Opponent:</b> <span id="oppName"></span></div>
         <button class="secondary" onclick="location.reload()">New game</button>
       </div>
+      <div class="sub" id="deckInfo" style="margin:6px 0 0"></div>
     </div>
 
     <div class="panel">
@@ -78,7 +78,7 @@ select{padding:11px;border:1px solid #d5d5dc;border-radius:11px;width:100%}
     </div>
 
     <div class="panel">
-      <h2>Sets collected</h2>
+      <h2>Sets collected <span id="setsCount" class="count"></span></h2>
       <div id="sets"></div>
     </div>
 
@@ -90,7 +90,9 @@ select{padding:11px;border:1px solid #d5d5dc;border-radius:11px;width:100%}
 </div>
 
 <script>
-const EXAMPLE=[["Cats",4],["Dogs",4],["Birds",4],["Fish",4],["Sharks",4],["Lions",4],["Tigers",4],["Bears",4],["Wolves",4],["Monkeys",4]];
+/* ---------- Card model ----------
+   A "rank" here means VALUE (A,2,3...K) — 13 of them, 4 copies each (one per suit).
+   This matches real Go Fish: you ask for a value, not one exact physical card. */
 const suits=[
   {name:"Spades",symbol:"♠",red:false},
   {name:"Hearts",symbol:"♥",red:true},
@@ -98,13 +100,20 @@ const suits=[
   {name:"Clubs",symbol:"♣",red:false}
 ];
 const values=["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
-const ranks=[];
-suits.forEach((s,si)=>values.forEach((v,vi)=>ranks.push({
-  name:v+" "+s.symbol, value:v, suit:s.name, symbol:s.symbol, red:s.red, copies:1, id:si*13+vi
-})));
+const rankDefs=values.map((v,i)=>({name:v,copies:4,id:i}));
+
+function rankPlural(i){
+  const n=rankDefs[i].name;
+  if(n==="A")return "Aces";
+  if(n==="J")return "Jacks";
+  if(n==="Q")return "Queens";
+  if(n==="K")return "Kings";
+  return n+"s";
+}
 
 let peer,conn,isHost=false,myName="",oppName="",roomId="";
-let hand=[],oppCount=0,sets=[],turn=false,gameStarted=false;
+let hand=[],oppCount=0,sets=[],turn=false,gameStarted=false,gameOver=false,deckCount=0;
+let hostState=null; // authoritative game state, only populated on the host
 
 function $(id){return document.getElementById(id)}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
@@ -117,6 +126,8 @@ function peerReady(){
   }
   return true;
 }
+
+/* ---------- Connection ---------- */
 function createRoom(){
   if(!peerReady()) return;
   isHost=true; myName="Player 1";
@@ -174,137 +185,199 @@ function setupConn(){
 }
 function send(o){if(conn&&conn.open)conn.send(o)}
 
-function buildDeck(){return shuffle(ranks.map(r=>({rank:r.id,id:crypto.randomUUID()})))}
+/* ---------- Deck ---------- */
+function buildDeck(){
+  const deck=[];
+  rankDefs.forEach((r,ri)=>{
+    suits.forEach((s,si)=>{
+      deck.push({rank:ri,suit:si,id:crypto.randomUUID()});
+    });
+  });
+  return shuffle(deck);
+}
 function shuffle(a){for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function countRank(h,ri){return h.filter(c=>c.rank===ri).length}
+function checkSets(h,playerIdx){
+  const done=[];
+  rankDefs.forEach((r,i)=>{
+    if(countRank(h,i)>=r.copies){h=h.filter(c=>c.rank!==i);done.push(i)}
+  });
+  return [h,done];
+}
 
-let hostState=null;
+/* ---------- Host game flow ---------- */
 function startGame(){
-  const deck=buildDeck(), half=Math.ceil(deck.length/2);
-  const h1=deck.slice(0,half),h2=deck.slice(half);
-  hostState={hands:[h1,h2],sets:[[],[]],deck:[],turn:0};
-  send({type:"init",hand:h2,oppCount:h1.length,turn:false});
-  enterGame(h1,h2.length,true);
-  broadcastState();
+  const deck=buildDeck();
+  const per=Math.min(7,Math.floor(deck.length/2));
+  hostState={
+    hands:[deck.slice(0,per),deck.slice(per,per*2)],
+    sets:[[],[]],
+    drawDeck:deck.slice(per*2),
+    turn:0,
+    lastAskedRank:null,
+    lastAskedBy:null
+  };
+  deckCount=hostState.drawDeck.length;
+  send({type:"init",hand:hostState.hands[1],oppCount:hostState.hands[0].length,turn:false,deckCount:deckCount});
+  enterGame(hostState.hands[0],hostState.hands[1].length,true);
+  updateUI();
 }
-function broadcastState(){
-  if(!hostState)return;
-  send({type:"state",oppCount:hostState.hands[0].length,sets:hostState.sets[1],turn:hostState.turn===1,gameOver:hostState.hands[0].length===0&&hostState.hands[1].length===0});
+
+/* Every host-side action funnels through here so BOTH sides always get an
+   update — this is what stops the "waiting forever" freeze. */
+function syncAll(hostLog,joinerLog){
+  hand=hostState.hands[0];
+  sets=hostState.sets[0];
+  deckCount=hostState.drawDeck.length;
+  const overText=checkGameOver();
+  turn=overText?false:hostState.turn===0;
+  updateUI();
+  if(hostLog)addLog(hostLog);
+  send({
+    type:"sync",
+    hand:hostState.hands[1],
+    sets:hostState.sets[1],
+    turn:overText?false:hostState.turn===1,
+    oppCount:hostState.hands[0].length,
+    deckCount:hostState.drawDeck.length,
+    log: joinerLog!==undefined?joinerLog:hostLog,
+    gameOver: !!overText,
+    gameOverText: overText||undefined
+  });
+  if(overText)showGameOver(overText);
 }
+function checkGameOver(){
+  if(!hostState)return null;
+  if(hostState.hands[0].length===0 && hostState.hands[1].length===0 && hostState.drawDeck.length===0){
+    const s0=hostState.sets[0].length,s1=hostState.sets[1].length;
+    if(s0>s1)return "Game over! Player 1 wins "+s0+" to "+s1+".";
+    if(s1>s0)return "Game over! Player 2 wins "+s1+" to "+s0+".";
+    return "Game over! It's a tie, "+s0+" sets each.";
+  }
+  return null;
+}
+function showGameOver(text){
+  gameOver=true;
+  $("actionPanel").style.opacity=".4";
+  addLog(text);
+  alert(text);
+}
+
+function hostProcessAsk(askerIdx,ri){
+  if(!hostState || hostState.turn!==askerIdx)return; // not their turn — ignore duplicate/late click
+  const otherIdx=1-askerIdx;
+  const askerHand=hostState.hands[askerIdx], otherHand=hostState.hands[otherIdx];
+  if(countRank(askerHand,ri)===0)return; // UI only offers owned values, but guard anyway
+  const who=askerIdx===0?"Player 1":"Player 2";
+  const n=countRank(otherHand,ri);
+  let msg;
+  if(n>0){
+    const moved=otherHand.filter(c=>c.rank===ri);
+    hostState.hands[askerIdx]=askerHand.concat(moved);
+    hostState.hands[otherIdx]=otherHand.filter(c=>c.rank!==ri);
+    let ns;[hostState.hands[askerIdx],ns]=checkSets(hostState.hands[askerIdx],askerIdx);
+    hostState.sets[askerIdx].push(...ns);
+    hostState.turn=askerIdx; // asker goes again
+    hostState.lastAskedRank=null; hostState.lastAskedBy=null;
+    msg=who+" asked for "+rankPlural(ri)+" and got "+n+"! Goes again.";
+  }else{
+    hostState.turn=otherIdx;
+    hostState.lastAskedRank=ri; hostState.lastAskedBy=askerIdx;
+    msg=who+" asked for "+rankPlural(ri)+" — Go Fish!";
+  }
+  syncAll(msg,msg);
+}
+
+function hostProcessDraw(playerIdx){
+  if(!hostState || hostState.turn!==playerIdx)return;
+  const who=playerIdx===0?"Player 1":"Player 2";
+  if(!hostState.drawDeck.length){
+    hostState.turn=1-playerIdx;
+    const msg=who+" tried to fish, but the deck is empty. Turn passes.";
+    syncAll(msg,msg);
+    return;
+  }
+  const c=hostState.drawDeck.pop();
+  hostState.hands[playerIdx].push(c);
+  let ns;[hostState.hands[playerIdx],ns]=checkSets(hostState.hands[playerIdx],playerIdx);
+  hostState.sets[playerIdx].push(...ns);
+  const gotAskedFor=hostState.lastAskedBy===playerIdx && hostState.lastAskedRank===c.rank;
+  hostState.lastAskedRank=null; hostState.lastAskedBy=null;
+  let msg;
+  if(gotAskedFor){
+    hostState.turn=playerIdx;
+    msg=who+" fished and drew the card they asked for! Goes again.";
+  }else{
+    hostState.turn=1-playerIdx;
+    msg=who+" fished a card. Turn passes.";
+  }
+  syncAll(msg,msg);
+}
+
+/* ---------- Message handling ---------- */
 function onData(m){
   if(m.type==="hello"){
     oppName=m.name||"Player 2";$("oppName").textContent=oppName;
     if(isHost){$("youName").textContent=myName;setStatus("Game starting…")}
   } else if(m.type==="init"){
-    oppName="Player 1";enterGame(m.hand,m.oppCount,false);turn=m.turn;updateUI();
-  } else if(m.type==="state"){
-    oppCount=m.oppCount;sets=m.sets||[];turn=m.turn;updateUI();
-    if(m.gameOver)alert("Game over!");
-  } else if(m.type==="ask"&&isHost){window.hostLastAskedRank=m.rank;hostAsk(m.rank)}
-  else if(m.type==="result"){hand=m.hand;sets=m.sets||sets;turn=m.turn;addLog(m.text);updateUI()}
-  else if(m.type==="draw"){if(isHost)hostDraw()}
-  else if(m.type==="sync"){hand=m.hand;sets=m.sets||[];turn=m.turn;updateUI()}
+    oppName="Player 1";deckCount=m.deckCount||0;enterGame(m.hand,m.oppCount,false);turn=m.turn;updateUI();
+  } else if(m.type==="sync"){
+    hand=m.hand;sets=m.sets||[];turn=m.turn;oppCount=m.oppCount;deckCount=m.deckCount||0;
+    if(m.log)addLog(m.log);
+    updateUI();
+    if(m.gameOver)showGameOver(m.gameOverText||"Game over!");
+  } else if(m.type==="ask" && isHost){
+    hostProcessAsk(1,m.rank);
+  } else if(m.type==="draw" && isHost){
+    hostProcessDraw(1);
+  }
 }
+
 function enterGame(h,oc,host){
   hand=h;oppCount=oc;gameStarted=true;turn=host?true:false;
   $("setup").classList.add("hidden");$("lobby").classList.add("hidden");$("game").classList.remove("hidden");
   $("youName").textContent=myName;$("oppName").textContent=host?"Player 2":"Player 1";updateUI();
   addLog(host?"You go first.":"Connected — wait for your turn.");
 }
-function rankName(i){return ranks[i]?.name||"Unknown"}
-function countRank(h,ri){return h.filter(c=>c.rank===ri).length}
-function checkSets(h,si){
-  const done=[];
-  ranks.forEach((r,i)=>{if(countRank(h,i)>=r.copies){h=h.filter(c=>c.rank!==i);done.push(i)}})
-  return [h,done]
-}
-function hostAsk(ri){
-  if(hostState.turn!==1)return;
-  const mine=hostState.hands[1],other=hostState.hands[0],n=countRank(other,ri);
-  if(countRank(mine,ri)===0){send({type:"result",hand:mine,sets:hostState.sets[1],turn:false,text:"You must have at least one "+rankName(ri)+" to ask for it."});return}
-  if(n){
-    const moved=other.filter(c=>c.rank===ri);hostState.hands[1].push(...moved);hostState.hands[0]=other.filter(c=>c.rank!==ri);
-    [hostState.hands[1],newSets]=checkSets(hostState.hands[1],1);hostState.sets[1].push(...newSets);
-    send({type:"result",hand:hostState.hands[1],sets:hostState.sets[1],turn:true,text:"They had "+n+" "+rankName(ri)+" — you got them. Ask again."});
-    broadcastState();
-  }else{
-    hostState.turn=0;send({type:"result",hand:hostState.hands[1],sets:hostState.sets[1],turn:false,text:"Go Fish! No "+rankName(ri)+"."});broadcastState();
-  }
-}
+
+/* ---------- Player actions ---------- */
 function askCard(){
-  if(!turn)return;
+  if(!turn||gameOver)return;
   const ri=+$("askSelect").value;
-  window.lastAskedRank=ri; window.hostLastAskedRank=ri;
-  if(countRank(hand,ri)===0)return addLog("You need at least one of that card to ask for it.");
-  if(isHost){hostAskAsHost(ri)}else{send({type:"ask",rank:ri});turn=false;updateUI();addLog("You asked for "+rankName(ri)+".")}
-}
-function hostAskAsHost(ri){
-  const other=hostState.hands[1],mine=hostState.hands[0],n=countRank(other,ri);
-  if(n){
-    const moved=other.filter(c=>c.rank===ri);hostState.hands[0].push(...moved);hostState.hands[1]=other.filter(c=>c.rank!==ri);
-    let ns;[hostState.hands[0],ns]=checkSets(hostState.hands[0],0);hostState.sets[0].push(...ns);
-    addLog("They had "+n+" "+rankName(ri)+". You got them — ask again.");turn=true;updateUI();broadcastState();
+  if(isNaN(ri)||countRank(hand,ri)===0)return addLog("You need at least one of that value to ask for it.");
+  if(isHost){
+    hostProcessAsk(0,ri);
   }else{
-    addLog("Go Fish! No "+rankName(ri)+".");hostState.turn=1;turn=false;updateUI();broadcastState();
+    send({type:"ask",rank:ri});turn=false;updateUI();addLog("You asked for "+rankPlural(ri)+".");
   }
 }
 function goFish(){
-  if(!turn)return;
-  if(isHost)hostDraw();else{send({type:"draw"});turn=false;updateUI();addLog("You went fishing…")}
-}
-function hostDraw(){
-  if(!hostState || hostState.turn!==0 && !isHost)return;
-  const player=hostState.turn;
-  if(!hostState.drawDeck.length){
-    hostState.turn=1-player;
-    if(player===0){turn=false;addLog("The deck is empty. Turn passes.");}
-    else send({type:"result",hand:hostState.hands[1],sets:hostState.sets[1],turn:false,text:"The deck is empty. Turn passes."});
-    broadcastState();updateUI();return;
-  }
-  const c=hostState.drawDeck.pop();
-  hostState.hands[player].push(c);
-  const drawnRank=c.rank;
-  let ns;
-  [hostState.hands[player],ns]=checkSets(hostState.hands[player],player);
-  hostState.sets[player].push(...ns);
-
-  if(player===0){
-    const gotAskedFor = window.lastAskedRank===drawnRank;
-    addLog("You drew "+rankName(drawnRank)+".");
-    turn=gotAskedFor;
-    hostState.turn=gotAskedFor?0:1;
-    if(gotAskedFor)addLog("You drew the card you asked for — go again.");
-    else if(hostState.drawDeck.length===0)addLog("The deck is empty.");
+  if(!turn||gameOver)return;
+  if(isHost){
+    hostProcessDraw(0);
   }else{
-    const gotAskedFor = window.hostLastAskedRank===drawnRank;
-    send({type:"result",hand:hostState.hands[1],sets:hostState.sets[1],turn:gotAskedFor,text:"You drew "+rankName(drawnRank)+"."+(gotAskedFor?" You got the card you asked for — go again.":" Your turn is over.")});
-    hostState.turn=gotAskedFor?1:0;
+    send({type:"draw"});turn=false;updateUI();addLog("You went fishing…");
   }
-  window.lastAskedRank=null;window.hostLastAskedRank=null;
-  broadcastState();updateUI();
 }
-// Replace startGame with a version that keeps the actual draw pile.
-const originalStart=startGame;
-startGame=function(){
-  const deck=buildDeck();
-  // Standard Go Fish: 7 cards each when the deck allows it; otherwise split evenly.
-  const per=Math.min(7,Math.floor(deck.length/2));
-  hostState={hands:[deck.slice(0,per),deck.slice(per,per*2)],sets:[[],[]],
-             drawDeck:deck.slice(per*2),turn:0};
-  send({type:"init",hand:hostState.hands[1],oppCount:hostState.hands[0].length,turn:false});
-  enterGame(hostState.hands[0],hostState.hands[1].length,true);
-  broadcastState();
-};
+
+/* ---------- Rendering ---------- */
+function cardHTML(c){
+  const r=rankDefs[c.rank], s=suits[c.suit];
+  return `<div class="playcard ${s.red?"red":""}"><b>${esc(r.name)}</b><span>${s.symbol}</span></div>`;
+}
 function updateUI(){
   $("handCount").textContent=hand.length;
-  $("hand").innerHTML=hand.length?hand.map(c=>{
-    const r=ranks[c.rank];
-    return `<div class="playcard ${r.red?"red":""}"><b>${esc(r.value)}</b><span>${r.symbol}</span></div>`;
-  }).join(""):"<span class='sub'>No cards</span>";
-  const opts=ranks.map((r,i)=>countRank(hand,i)?`<option value="${i}">${esc(r.name)} (${countRank(hand,i)})</option>`:"").join("");
+  $("hand").innerHTML=hand.length?hand.map(cardHTML).join(""):"<span class='sub'>No cards</span>";
+  const opts=rankDefs.map((r,i)=>{
+    const n=countRank(hand,i);
+    return n?`<option value="${i}">${esc(rankPlural(i))} (${n})</option>`:"";
+  }).join("");
   $("askSelect").innerHTML=opts||"<option>No cards to ask for</option>";
-  $("hint").textContent=turn?"Your turn — ask for a card you already have, or Go Fish.":"Waiting for the other player…";
-  $("actionPanel").style.opacity=turn?"1":".65";
-  $("sets").innerHTML=sets.length?sets.map(i=>`<span class="count" style="display:inline-block;margin:3px">${esc(rankName(i))}</span>`).join(""):"<span class='sub'>None yet</span>";
+  $("hint").textContent=gameOver?"Game over.":turn?"Your turn — ask for a value you already have, or Go Fish.":"Waiting for the other player…";
+  $("actionPanel").style.opacity=gameOver?".4":turn?"1":".65";
+  $("sets").innerHTML=sets.length?sets.map(i=>`<span class="count" style="display:inline-block;margin:3px">${esc(rankPlural(i))}</span>`).join(""):"<span class='sub'>None yet</span>";
+  $("setsCount").textContent=sets.length?sets.length+" set"+(sets.length===1?"":"s"):"";
+  $("deckInfo").textContent="Cards left in deck: "+deckCount+" • Opponent's hand: "+oppCount;
 }
 function addLog(t){let d=document.createElement("div");d.textContent=t;$("log").prepend(d)}
 
@@ -313,7 +386,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   const joinBtn=document.getElementById("joinRoomBtn");
   if(createBtn) createBtn.addEventListener("click", createRoom);
   if(joinBtn) joinBtn.addEventListener("click", joinRoom);
-}); 
+});
 </script>
 </body>
 </html>
