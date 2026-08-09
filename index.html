@@ -6,27 +6,142 @@
 <title>Go Fish — Custom</title>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>window.addEventListener("error",function(e){if(!window.Peer && e.target && e.target.tagName==="SCRIPT"){var x=document.createElement("script");x.src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js";document.head.appendChild(x)}} ,true);</script>
+<script>(function(){try{if(localStorage.getItem("gf_theme")==="dark")document.documentElement.classList.add("dark");}catch(e){}})();</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#171717;background:#f5f5f7}
-*{box-sizing:border-box}body{margin:0}.wrap{max-width:900px;margin:auto;padding:18px}
-h1{margin:0 0 4px;font-size:28px}.sub{color:#666;margin:0 0 18px}
-.card,.panel{background:white;border-radius:18px;padding:16px;box-shadow:0 2px 12px #00000012;margin-bottom:14px}
-button,input,select{font:inherit}button{border:0;border-radius:12px;padding:11px 15px;background:#171717;color:#fff;font-weight:700;cursor:pointer}
-button.secondary{background:#e9e9ee;color:#171717}button:disabled{opacity:.45}
-input{width:100%;padding:11px;border:1px solid #d5d5dc;border-radius:11px}
+:root{
+  --ink:#0B3538;--bg:#EAF5F2;--surface:#FFFFFF;--muted:#5B7876;
+  --teal:#0E7C7B;--teal-dark:#0A5F5E;--coral:#FF7A50;--sand:#F1ECDF;
+  --input-border:#CFE3DD;--status-bg:#E3F1EC;--chip-bg:#DCEFE9;
+  --shadow:0 10px 28px -14px rgba(11,53,56,.28);
+}
+html.dark{
+  --ink:#EAF5F2;--bg:#07191C;--surface:#10282B;--muted:#8FB2AE;
+  --teal:#2FD9C7;--teal-dark:#22ADA0;--coral:#FF9466;--sand:#173234;
+  --input-border:#20474A;--status-bg:#123032;--chip-bg:#153A3C;
+  --shadow:0 10px 28px -14px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(180deg,var(--status-bg) 0%,var(--bg) 420px);color:var(--ink);font-family:'Inter',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;transition:background .25s ease,color .25s ease}
+.wrap{max-width:900px;margin:auto;padding:22px;position:relative;z-index:1;animation:fadeSlideIn .5s cubic-bezier(.2,.8,.2,1) both}
+h1,h2{font-family:'Fredoka',system-ui,sans-serif;margin:0}
+h1{font-size:34px;letter-spacing:.2px}
+h2{font-size:19px;margin-bottom:2px}
+.sub{color:var(--muted);margin:0 0 18px;line-height:1.45}
+
+.card,.panel{background:var(--surface);border-radius:20px;padding:18px;box-shadow:var(--shadow);margin-bottom:14px;border:1px solid rgba(127,127,127,.08);transition:background .25s ease,border-color .25s ease}
+
+button,input,select{font:inherit}
+button{border:0;border-radius:14px;padding:12px 16px;background:var(--teal);color:#fff;font-weight:700;cursor:pointer;transition:transform .12s cubic-bezier(.2,.8,.2,1),background .15s ease,box-shadow .15s ease,opacity .2s ease}
+button:hover{background:var(--teal-dark);transform:translateY(-1px);box-shadow:0 8px 18px -10px rgba(11,53,56,.45)}
+button:active{transform:scale(.95) translateY(0);box-shadow:none}
+button.secondary{background:var(--sand);color:var(--ink)}
+button.secondary:hover{background:var(--input-border)}
+button:disabled{opacity:.45;cursor:default;transform:none;box-shadow:none}
+
+input{width:100%;padding:11px 13px;border:1.5px solid var(--input-border);border-radius:12px;background:var(--surface);color:var(--ink);transition:border-color .15s ease,background .25s ease}
+select{padding:11px 13px;border:1.5px solid var(--input-border);border-radius:12px;width:100%;background:var(--surface);color:var(--ink);transition:border-color .15s ease}
+input:focus,select:focus{outline:none;border-color:var(--teal)}
+
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row>*{flex:1}.row button{flex:0 0 auto}
-.hidden{display:none}.status{padding:10px 12px;border-radius:10px;background:#f0f0f4;color:#444}
-#roomCode{font-size:28px;font-weight:800;letter-spacing:3px;text-align:center;padding:12px;background:#f1f1f5;border-radius:12px}
+.hidden{display:none}
+.status{padding:11px 13px;border-radius:12px;background:var(--status-bg);color:var(--ink);transition:background .25s ease}
+#roomCode{font-family:'Fredoka',sans-serif;font-size:30px;font-weight:600;letter-spacing:5px;text-align:center;padding:14px;background:var(--status-bg);border-radius:14px;color:var(--teal)}
+
 .hands{display:flex;gap:8px;flex-wrap:wrap}
-.playcard{width:76px;height:106px;border-radius:12px;border:1px solid #ddd;background:linear-gradient(145deg,#fff,#eee);padding:8px;text-align:center;display:flex;flex-direction:column;justify-content:center;overflow:hidden}
-.playcard b{font-size:23px}.playcard span{font-size:32px;line-height:1}.playcard.red{color:#d11}
-.count{background:#eee;border-radius:999px;padding:3px 8px;font-size:12px}
-.log{max-height:180px;overflow:auto;font-size:14px;color:#444}.log div{padding:5px 0;border-bottom:1px solid #eee}
-select{padding:11px;border:1px solid #d5d5dc;border-radius:11px;width:100%}
-@media(max-width:600px){.wrap{padding:12px}}
+.playcard{width:76px;height:106px;border-radius:12px;border:1px solid #e3ded2;background:linear-gradient(150deg,#fff,#f3f1e9);padding:8px;text-align:center;display:flex;flex-direction:column;justify-content:center;overflow:hidden;color:#171717;box-shadow:0 4px 10px -4px rgba(11,53,56,.35);transition:transform .18s ease}
+@media(hover:hover){.playcard:hover{transform:translateY(-4px) rotate(-1deg)}}
+.playcard b{font-size:23px;font-family:'Fredoka',sans-serif}.playcard span{font-size:32px;line-height:1}.playcard.red{color:#d11}
+
+.count{background:var(--chip-bg);color:var(--teal-dark);border-radius:999px;padding:3px 9px;font-size:12px;font-weight:700}
+
+.log{max-height:180px;overflow:auto;font-size:14px}
+.log div{padding:6px 0;border-bottom:1px solid var(--input-border)}
+.log div:first-child{color:var(--teal-dark);font-weight:600}
+
+.topRightMenu{position:fixed;top:14px;right:14px;z-index:50}
+.iconBtn{width:46px;height:46px;padding:0;border-radius:50%;font-size:19px;display:flex;align-items:center;justify-content:center;background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.iconBtn:hover{background:var(--sand);transform:rotate(18deg) scale(1.06);box-shadow:var(--shadow)}
+.iconBtn:active{transform:scale(.92)}
+.dropdown{position:absolute;right:0;top:54px;background:var(--surface);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;min-width:150px;transform-origin:top right}
+.dropdown:not(.hidden){animation:popIn .16s cubic-bezier(.2,.8,.2,1) both}
+.dropdownItem{padding:12px 16px;cursor:pointer;font-weight:600;font-size:15px;color:var(--ink);transition:background .12s ease}
+.dropdownItem:hover{background:var(--status-bg)}
+
+.modalOverlay{position:fixed;inset:0;background:#06181a66;backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:100;padding:18px}
+.modalOverlay.hidden{display:none}
+.modalBox{max-width:360px;width:100%}
+.modalOverlay:not(.hidden) .modalBox{animation:modalIn .22s cubic-bezier(.2,.8,.2,1) both}
+
+.tabRow{display:flex;gap:8px;margin-bottom:14px}
+.tabRow button{flex:1}
+.tabBtn.active{background:var(--teal);color:#fff;box-shadow:0 8px 18px -10px rgba(14,124,123,.55)}
+.tabBtn:not(.active){background:var(--sand);color:var(--ink);box-shadow:none}
+
+.modalHeader{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.modalCloseBtn{width:34px;height:34px;font-size:14px;box-shadow:none}
+.modalCloseBtn:hover{box-shadow:none}
+
+#actionPanel{transition:opacity .25s ease}
+
+.bubbles{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.bubbles span{position:absolute;bottom:-60px;border-radius:50%;background:radial-gradient(circle at 30% 30%,rgba(14,124,123,.20),rgba(14,124,123,.03));animation:rise linear infinite}
+html.dark .bubbles span{background:radial-gradient(circle at 30% 30%,rgba(47,217,199,.16),rgba(47,217,199,.02))}
+
+@keyframes rise{from{transform:translateY(0) translateX(0)}to{transform:translateY(-115vh) translateX(24px)}}
+@keyframes popIn{from{opacity:0;transform:translateY(-6px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes modalIn{from{opacity:0;transform:scale(.94) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
+@keyframes fadeSlideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes dealIn{from{opacity:0;transform:translateY(18px) scale(.86) rotate(-5deg)}to{opacity:1;transform:translateY(0) scale(1) rotate(0)}}
+
+.fadeSlideIn{animation:fadeSlideIn .35s cubic-bezier(.2,.8,.2,1) both}
+.log div.logNew{animation:fadeSlideIn .3s ease both}
+.cardNew{animation:dealIn .4s cubic-bezier(.2,.8,.2,1) both}
+.hands .cardNew:nth-child(1){animation-delay:.02s}
+.hands .cardNew:nth-child(2){animation-delay:.06s}
+.hands .cardNew:nth-child(3){animation-delay:.10s}
+.hands .cardNew:nth-child(4){animation-delay:.14s}
+.hands .cardNew:nth-child(5){animation-delay:.18s}
+.hands .cardNew:nth-child(6){animation-delay:.22s}
+.hands .cardNew:nth-child(7){animation-delay:.26s}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+  .bubbles{display:none}
+}
+@media(max-width:600px){.wrap{padding:14px}}
 </style>
 </head>
 <body>
+<div class="bubbles" aria-hidden="true">
+  <span style="left:6%;width:22px;height:22px;animation-duration:15s;animation-delay:0s"></span>
+  <span style="left:20%;width:13px;height:13px;animation-duration:11s;animation-delay:2s"></span>
+  <span style="left:36%;width:27px;height:27px;animation-duration:18s;animation-delay:1s"></span>
+  <span style="left:52%;width:11px;height:11px;animation-duration:9s;animation-delay:4.5s"></span>
+  <span style="left:66%;width:19px;height:19px;animation-duration:16s;animation-delay:3s"></span>
+  <span style="left:80%;width:15px;height:15px;animation-duration:12s;animation-delay:.5s"></span>
+  <span style="left:91%;width:10px;height:10px;animation-duration:8.5s;animation-delay:5.5s"></span>
+</div>
+<div class="topRightMenu">
+  <button id="menuBtn" class="secondary iconBtn" type="button" onclick="toggleMenu()">⚙️</button>
+  <div id="menuDropdown" class="dropdown hidden">
+    <div class="dropdownItem" onclick="openSettings()">Settings</div>
+    <div class="dropdownItem" onclick="openRobot()">Robot</div>
+  </div>
+</div>
+
+<div id="modalOverlay" class="modalOverlay hidden">
+  <div class="card modalBox">
+    <div class="modalHeader">
+      <h2 id="modalTitle"></h2>
+      <button class="secondary iconBtn modalCloseBtn" type="button" onclick="closeModal()" aria-label="Close">✕</button>
+    </div>
+    <div id="modalBody" class="sub"></div>
+  </div>
+</div>
+
 <div class="wrap">
   <h1>🐟 Go Fish</h1>
   <p class="sub">Custom cards • two phones • private hands</p>
@@ -38,17 +153,31 @@ select{padding:11px;border:1px solid #d5d5dc;border-radius:11px;width:100%}
   </div>
 
   <div id="lobby" class="card">
-    <h2>2. Connect</h2>
-    <div class="row">
-      <button id="createRoomBtn" type="button">Create room</button>
-      <input id="joinCode" placeholder="Enter room code" autocapitalize="characters">
-      <button id="joinRoomBtn" type="button" class="secondary">Join room</button>
+    <div class="tabRow">
+      <button id="tabConnectBtn" class="tabBtn active" type="button" onclick="showLobbyTab('connect')">Connect</button>
+      <button id="tabRoomSettingsBtn" class="tabBtn" type="button" onclick="showLobbyTab('settings')">Room settings</button>
     </div>
-    <div style="height:10px"></div>
-    <div id="status" class="status">Ready — tap Create room.</div>
-    <div id="hostBox" class="hidden" style="margin-top:12px">
-      <div style="text-align:center;color:#666">Give this code to your girlfriend</div>
-      <div id="roomCode"></div>
+
+    <div id="lobbyConnectPanel">
+      <div class="row">
+        <button id="createRoomBtn" type="button">Create room</button>
+        <input id="joinCode" placeholder="Enter room code" autocapitalize="characters">
+        <button id="joinRoomBtn" type="button" class="secondary">Join room</button>
+      </div>
+      <div style="height:10px"></div>
+      <div id="status" class="status">Ready — tap Create room.</div>
+      <div id="hostBox" class="hidden" style="margin-top:12px">
+        <div style="text-align:center;color:#666">Give this code to your girlfriend</div>
+        <div id="roomCode"></div>
+      </div>
+    </div>
+
+    <div id="lobbyRoomSettingsPanel" class="hidden">
+      <p class="sub" style="margin-bottom:10px">Only matters for whoever taps Create room — the deck choice is sent to the other player automatically.</p>
+      <select id="deckCountSelect">
+        <option value="1">1 deck — 52 cards</option>
+        <option value="2">2 decks — 104 cards, longer game, 2 sets of each value possible</option>
+      </select>
     </div>
   </div>
 
@@ -114,8 +243,84 @@ function rankPlural(i){
 let peer,conn,isHost=false,myName="",oppName="",roomId="";
 let hand=[],oppCount=0,sets=[],turn=false,gameStarted=false,gameOver=false,deckCount=0;
 let hostState=null; // authoritative game state, only populated on the host
+let numDecks=1; // set from the room settings tab when the host creates a room
+let vsRobot=false; // true when playing a local solo game against the bot
+let customName=""; let isDark=false;
+try{customName=localStorage.getItem("gf_name")||"";}catch(e){}
+try{isDark=localStorage.getItem("gf_theme")==="dark";}catch(e){}
 
 function $(id){return document.getElementById(id)}
+function playEntrance(el){
+  if(!el)return;
+  el.classList.remove("fadeSlideIn");
+  void el.offsetWidth; // force reflow so the animation restarts
+  el.classList.add("fadeSlideIn");
+}
+
+/* ---------- Lobby tabs ---------- */
+function showLobbyTab(name){
+  const isConnect=name==="connect";
+  $("lobbyConnectPanel").classList.toggle("hidden",!isConnect);
+  $("lobbyRoomSettingsPanel").classList.toggle("hidden",isConnect);
+  $("tabConnectBtn").classList.toggle("active",isConnect);
+  $("tabRoomSettingsBtn").classList.toggle("active",!isConnect);
+  playEntrance(isConnect?$("lobbyConnectPanel"):$("lobbyRoomSettingsPanel"));
+}
+
+/* ---------- Top-right menu ---------- */
+function toggleMenu(){$("menuDropdown").classList.toggle("hidden")}
+function closeMenu(){$("menuDropdown").classList.add("hidden")}
+function closeModal(){$("modalOverlay").classList.add("hidden")}
+document.addEventListener("click",e=>{
+  if(!e.target.closest(".topRightMenu"))closeMenu();
+});
+$("modalOverlay").addEventListener("click",e=>{
+  if(e.target.id==="modalOverlay")closeModal();
+});
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){closeModal();closeMenu();}
+});
+
+function openSettings(){
+  closeMenu();
+  $("modalTitle").textContent="Settings";
+  $("modalBody").innerHTML=
+    '<label class="sub" style="display:block;margin-bottom:6px">Player name</label>'+
+    '<input id="nameInput" placeholder="Player 1" value="'+esc(customName)+'" oninput="saveName(this.value)" style="margin-bottom:16px">'+
+    '<label class="sub" style="display:block;margin-bottom:6px">Appearance</label>'+
+    '<div class="row">'+
+      '<button type="button" class="tabBtn'+(isDark?'':' active')+'" id="lightBtn" onclick="setTheme(false)">☀️ Light</button>'+
+      '<button type="button" class="tabBtn'+(isDark?' active':'')+'" id="darkBtn" onclick="setTheme(true)">🌙 Dark</button>'+
+    '</div>';
+  $("modalOverlay").classList.remove("hidden");
+}
+function saveName(v){
+  customName=v;
+  try{localStorage.setItem("gf_name",v);}catch(e){}
+}
+function setTheme(dark){
+  isDark=dark;
+  document.documentElement.classList.toggle("dark",dark);
+  try{localStorage.setItem("gf_theme",dark?"dark":"light");}catch(e){}
+  const lb=$("lightBtn"),db=$("darkBtn");
+  if(lb)lb.classList.toggle("active",!dark);
+  if(db)db.classList.toggle("active",dark);
+}
+
+function openRobot(){
+  closeMenu();
+  if(gameStarted && !confirm("Start a new game against the Robot? This will end your current game."))return;
+  startRobotGame();
+}
+function startRobotGame(){
+  numDecks=parseInt($("deckCountSelect").value,10)||1;
+  vsRobot=true; isHost=true;
+  myName=(customName||"").trim()||"Player 1";
+  conn=null; // ensure any leftover peer connection is ignored
+  startGame();
+  $("oppName").textContent="Robot";
+}
+
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function setStatus(t){$("status").textContent=t}
 function randomId(){return "gf-"+Math.random().toString(36).slice(2,10)}
@@ -130,7 +335,8 @@ function peerReady(){
 /* ---------- Connection ---------- */
 function createRoom(){
   if(!peerReady()) return;
-  isHost=true; myName="Player 1";
+  isHost=true; myName=(customName||"").trim()||"Player 1";
+  numDecks=parseInt($("deckCountSelect").value,10)||1;
   setStatus("Creating room…");
   try{
     peer=new Peer(randomId(),{debug:0});
@@ -138,6 +344,7 @@ function createRoom(){
       roomId=id;
       $("roomCode").textContent=id.replace(/^gf-/,"").toUpperCase();
       $("hostBox").classList.remove("hidden");
+      playEntrance($("hostBox"));
       setStatus("Room ready — send the code to the other player.");
     });
     peer.on("connection",c=>{
@@ -157,7 +364,7 @@ function joinRoom(){
   if(!peerReady()) return;
   let code=$("joinCode").value.trim().toLowerCase().replace(/^gf-/,"");
   if(!code){setStatus("Enter the room code first.");return}
-  isHost=false; myName="Player 2"; roomId="gf-"+code;
+  isHost=false; myName=(customName||"").trim()||"Player 2"; roomId="gf-"+code;
   setStatus("Joining room…");
   try{
     peer=new Peer(undefined,{debug:0});
@@ -186,28 +393,40 @@ function setupConn(){
 function send(o){if(conn&&conn.open)conn.send(o)}
 
 /* ---------- Deck ---------- */
-function buildDeck(){
+function buildDeck(decks){
   const deck=[];
-  rankDefs.forEach((r,ri)=>{
-    suits.forEach((s,si)=>{
-      deck.push({rank:ri,suit:si,id:crypto.randomUUID()});
+  for(let d=0; d<decks; d++){
+    rankDefs.forEach((r,ri)=>{
+      suits.forEach((s,si)=>{
+        deck.push({rank:ri,suit:si,id:crypto.randomUUID()});
+      });
     });
-  });
+  }
   return shuffle(deck);
 }
 function shuffle(a){for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function countRank(h,ri){return h.filter(c=>c.rank===ri).length}
+/* Pulls out groups of 4-of-a-value at a time — with a 2-deck game (8 copies
+   of each value in play) a hand can complete two separate sets of the same
+   value, so this can push more than one "done" entry per rank. */
 function checkSets(h,playerIdx){
   const done=[];
   rankDefs.forEach((r,i)=>{
-    if(countRank(h,i)>=r.copies){h=h.filter(c=>c.rank!==i);done.push(i)}
+    while(countRank(h,i)>=r.copies){
+      let removed=0;
+      h=h.filter(c=>{
+        if(c.rank===i && removed<r.copies){removed++;return false}
+        return true;
+      });
+      done.push(i);
+    }
   });
   return [h,done];
 }
 
 /* ---------- Host game flow ---------- */
 function startGame(){
-  const deck=buildDeck();
+  const deck=buildDeck(numDecks);
   const per=Math.min(7,Math.floor(deck.length/2));
   hostState={
     hands:[deck.slice(0,per),deck.slice(per,per*2)],
@@ -215,24 +434,50 @@ function startGame(){
     drawDeck:deck.slice(per*2),
     turn:0,
     lastAskedRank:null,
-    lastAskedBy:null
+    lastAskedBy:null,
+    names:[myName, vsRobot?"Robot":"Player 2"]
   };
   deckCount=hostState.drawDeck.length;
-  send({type:"init",hand:hostState.hands[1],oppCount:hostState.hands[0].length,turn:false,deckCount:deckCount});
+  send({type:"init",hand:hostState.hands[1],oppCount:hostState.hands[0].length,turn:false,deckCount:deckCount,numDecks:numDecks});
   enterGame(hostState.hands[0],hostState.hands[1].length,true);
   updateUI();
+}
+
+/* Resolves a player's display name, falling back to a generic label until
+   the real name is known. */
+function playerLabel(idx){
+  return (hostState && hostState.names && hostState.names[idx]) || (idx===0?"Player 1":"Player 2");
+}
+
+/* If the player whose turn it is has an empty hand and the deck still has
+   cards, they auto-draw one to have something to play with. Turn does not
+   pass — they still get to ask or go-fish normally after the refill. */
+function autoDrawForEmptyHand(logs){
+  while(hostState.drawDeck.length>0 && hostState.hands[hostState.turn].length===0){
+    const p=hostState.turn;
+    const who=playerLabel(p);
+    const c=hostState.drawDeck.pop();
+    hostState.hands[p].push(c);
+    let ns;[hostState.hands[p],ns]=checkSets(hostState.hands[p],p);
+    hostState.sets[p].push(...ns);
+    logs.push(who+"'s hand was empty — drew a card automatically.");
+  }
 }
 
 /* Every host-side action funnels through here so BOTH sides always get an
    update — this is what stops the "waiting forever" freeze. */
 function syncAll(hostLog,joinerLog){
+  const extra=[];
+  autoDrawForEmptyHand(extra);
   hand=hostState.hands[0];
   sets=hostState.sets[0];
+  oppCount=hostState.hands[1].length;
   deckCount=hostState.drawDeck.length;
   const overText=checkGameOver();
   turn=overText?false:hostState.turn===0;
   updateUI();
   if(hostLog)addLog(hostLog);
+  extra.forEach(l=>addLog(l));
   send({
     type:"sync",
     hand:hostState.hands[1],
@@ -241,17 +486,21 @@ function syncAll(hostLog,joinerLog){
     oppCount:hostState.hands[0].length,
     deckCount:hostState.drawDeck.length,
     log: joinerLog!==undefined?joinerLog:hostLog,
+    extraLogs: extra,
     gameOver: !!overText,
     gameOverText: overText||undefined
   });
   if(overText)showGameOver(overText);
+  if(vsRobot && hostState && !gameOver && hostState.turn===1){
+    setTimeout(runBotTurn,700);
+  }
 }
 function checkGameOver(){
   if(!hostState)return null;
   if(hostState.hands[0].length===0 && hostState.hands[1].length===0 && hostState.drawDeck.length===0){
     const s0=hostState.sets[0].length,s1=hostState.sets[1].length;
-    if(s0>s1)return "Game over! Player 1 wins "+s0+" to "+s1+".";
-    if(s1>s0)return "Game over! Player 2 wins "+s1+" to "+s0+".";
+    if(s0>s1)return "Game over! "+playerLabel(0)+" wins "+s0+" to "+s1+".";
+    if(s1>s0)return "Game over! "+playerLabel(1)+" wins "+s1+" to "+s0+".";
     return "Game over! It's a tie, "+s0+" sets each.";
   }
   return null;
@@ -268,7 +517,7 @@ function hostProcessAsk(askerIdx,ri){
   const otherIdx=1-askerIdx;
   const askerHand=hostState.hands[askerIdx], otherHand=hostState.hands[otherIdx];
   if(countRank(askerHand,ri)===0)return; // UI only offers owned values, but guard anyway
-  const who=askerIdx===0?"Player 1":"Player 2";
+  const who=playerLabel(askerIdx);
   const n=countRank(otherHand,ri);
   let msg;
   if(n>0){
@@ -290,7 +539,7 @@ function hostProcessAsk(askerIdx,ri){
 
 function hostProcessDraw(playerIdx){
   if(!hostState || hostState.turn!==playerIdx)return;
-  const who=playerIdx===0?"Player 1":"Player 2";
+  const who=playerLabel(playerIdx);
   if(!hostState.drawDeck.length){
     hostState.turn=1-playerIdx;
     const msg=who+" tried to fish, but the deck is empty. Turn passes.";
@@ -318,12 +567,16 @@ function hostProcessDraw(playerIdx){
 function onData(m){
   if(m.type==="hello"){
     oppName=m.name||"Player 2";$("oppName").textContent=oppName;
-    if(isHost){$("youName").textContent=myName;setStatus("Game starting…")}
+    if(isHost){
+      $("youName").textContent=myName;setStatus("Game starting…");
+      if(hostState)hostState.names[1]=oppName;
+    }
   } else if(m.type==="init"){
-    oppName="Player 1";deckCount=m.deckCount||0;enterGame(m.hand,m.oppCount,false);turn=m.turn;updateUI();
+    oppName="Player 1";deckCount=m.deckCount||0;numDecks=m.numDecks||1;enterGame(m.hand,m.oppCount,false);turn=m.turn;updateUI();
   } else if(m.type==="sync"){
     hand=m.hand;sets=m.sets||[];turn=m.turn;oppCount=m.oppCount;deckCount=m.deckCount||0;
     if(m.log)addLog(m.log);
+    if(m.extraLogs)m.extraLogs.forEach(l=>addLog(l));
     updateUI();
     if(m.gameOver)showGameOver(m.gameOverText||"Game over!");
   } else if(m.type==="ask" && isHost){
@@ -333,10 +586,27 @@ function onData(m){
   }
 }
 
+/* Simple bot: always asks (never blind-fishes) for the value it holds the
+   most copies of — the more copies in hand, the better the odds the
+   remaining ones are with the opponent rather than buried in the deck. */
+function runBotTurn(){
+  if(!hostState || hostState.turn!==1 || gameOver)return;
+  const botHand=hostState.hands[1];
+  if(botHand.length===0){hostProcessDraw(1);return} // safety fallback
+  let bestRank=null,bestCount=0;
+  rankDefs.forEach((r,i)=>{
+    const c=countRank(botHand,i);
+    if(c>bestCount){bestCount=c;bestRank=i}
+  });
+  if(bestRank===null)return;
+  hostProcessAsk(1,bestRank);
+}
+
 function enterGame(h,oc,host){
   hand=h;oppCount=oc;gameStarted=true;turn=host?true:false;
   $("setup").classList.add("hidden");$("lobby").classList.add("hidden");$("game").classList.remove("hidden");
   $("youName").textContent=myName;$("oppName").textContent=host?"Player 2":"Player 1";updateUI();
+  playEntrance($("game"));
   addLog(host?"You go first.":"Connected — wait for your turn.");
 }
 
@@ -361,13 +631,15 @@ function goFish(){
 }
 
 /* ---------- Rendering ---------- */
-function cardHTML(c){
+let lastHandIds=[];
+function cardHTML(c,isNew){
   const r=rankDefs[c.rank], s=suits[c.suit];
-  return `<div class="playcard ${s.red?"red":""}"><b>${esc(r.name)}</b><span>${s.symbol}</span></div>`;
+  return `<div class="playcard ${s.red?"red":""} ${isNew?"cardNew":""}"><b>${esc(r.name)}</b><span>${s.symbol}</span></div>`;
 }
 function updateUI(){
   $("handCount").textContent=hand.length;
-  $("hand").innerHTML=hand.length?hand.map(cardHTML).join(""):"<span class='sub'>No cards</span>";
+  $("hand").innerHTML=hand.length?hand.map(c=>cardHTML(c,!lastHandIds.includes(c.id))).join(""):"<span class='sub'>No cards</span>";
+  lastHandIds=hand.map(c=>c.id);
   const opts=rankDefs.map((r,i)=>{
     const n=countRank(hand,i);
     return n?`<option value="${i}">${esc(rankPlural(i))} (${n})</option>`:"";
@@ -377,9 +649,9 @@ function updateUI(){
   $("actionPanel").style.opacity=gameOver?".4":turn?"1":".65";
   $("sets").innerHTML=sets.length?sets.map(i=>`<span class="count" style="display:inline-block;margin:3px">${esc(rankPlural(i))}</span>`).join(""):"<span class='sub'>None yet</span>";
   $("setsCount").textContent=sets.length?sets.length+" set"+(sets.length===1?"":"s"):"";
-  $("deckInfo").textContent="Cards left in deck: "+deckCount+" • Opponent's hand: "+oppCount;
+  $("deckInfo").textContent="Cards left in deck: "+deckCount+" • Opponent's hand: "+oppCount+(numDecks>1?" • 2-deck game":"");
 }
-function addLog(t){let d=document.createElement("div");d.textContent=t;$("log").prepend(d)}
+function addLog(t){let d=document.createElement("div");d.className="logNew";d.textContent=t;$("log").prepend(d)}
 
 document.addEventListener("DOMContentLoaded",()=>{
   const createBtn=document.getElementById("createRoomBtn");
